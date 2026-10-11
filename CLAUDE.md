@@ -1,0 +1,268 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository.
+
+## Project Overview
+
+**Coinly** is a personal finance app: income and expenses, categories, monthly spending limits and
+savings. Built with Kotlin Multiplatform + Compose Multiplatform for Android and iOS.
+
+- Offline-first: all data lives in a local Room database. No backend, no networking, no auth.
+- Built incrementally: MVP first, one feature at a time, each one requested explicitly.
+- Current state: project skeleton (dependencies + empty `HomeScreen`).
+- UI language is Russian. Localization is postponed.
+
+## Rules (mandatory)
+
+These rules override your own preferences. When a rule conflicts with "better" code, follow the
+rule and mention the alternative in your reply.
+
+### Scope
+
+- Do only what the task asks. Do not refactor, rename, reformat or "improve" adjacent code.
+- One feature at a time. The MVP roadmap below is context, not a to-do list: do not create screens,
+  entities or helpers for features that were not requested.
+- Never delete files, functions or commented-out code unless the task says so.
+- No new dependencies, modules, base classes, generic helpers/extensions or abstractions without
+  explicit approval.
+- Problems noticed outside the task: mention them in the reply, do not fix them.
+- Ambiguous requirement or missing info (business rule, which field is required, edge case): ask
+  before implementing. Never invent values or rules.
+- Task touches more than one layer (data + screen) or more than ~3 files: propose a plan first and
+  wait for approval.
+- Commit only when asked.
+- At the end of a task, list the decisions and assumptions you made on your own.
+
+### Copy existing patterns
+
+- Before writing a new screen or repository, find the closest existing one and copy its structure.
+  Do not mix patterns from different screens.
+- Screen = 4 files: `XxxScreen.kt`, `XxxScreenModel.kt`, `XxxState.kt`, `XxxEvent.kt`, placed in
+  `screen/<feature>/` for a single-screen feature (e.g. `screen/home/`) or in
+  `screen/<feature>/<screen_name>/` when the feature has several screens
+  (e.g. `screen/transaction/edit/`).
+- Screen: Voyager `class XxxScreen : Screen` with `@Composable override fun Content()`; gets the model
+  via `koinScreenModel()` and reads `model.state.collectAsState()`.
+- Event: `sealed interface XxxEvent`. Reset event is `data object Idle`.
+- ScreenModel: `StateScreenModel<XxxState>(XxxState()), KoinComponent`, repositories via
+  `by inject<...>()`, one public `fun onEvent(event)` with `when`, state changes through the
+  private `setState(...)`.
+- `setState` convention: one-shot flags (`loading`, `errorMessage`, `saveSuccess`, ...) default to
+  reset; persistent data defaults to `?: it.field`. A new State field must also be added to `setState`.
+- Register ScreenModels as `factory` in `screenModelModule()` and repositories as `single` in
+  `di/Koin.common.kt`.
+- Errors: `errorMessage` in State → Material 3 `AlertDialog` on the screen → `Idle` resets it.
+- Not decided yet — ask before the first screen that needs it:
+    - how screen arguments (e.g. the id of an item to edit) reach the ScreenModel;
+    - how Room `Flow` emissions update State without breaking the `setState` convention (an emission
+      that arrives right after a save would reset `saveSuccess` before the UI sees it).
+
+### Data layer (local only)
+
+- Room 3: artifacts, packages and the Gradle plugin are `androidx.room3`, not `androidx.room`. Type
+  converters are `@ColumnTypeConverter(s)`. DAO functions must be `suspend` or return `Flow`.
+- Database: one `@Database` class in `core/database/`, `BundledSQLiteDriver`, constructed through
+  `@ConstructedBy` + `expect object XxxConstructor : RoomDatabaseConstructor<...>`. Database builders
+  are plain functions in `androidMain` / `iosMain` (different signatures, not expect/actual).
+- Repository: `class XxxRepository : KoinComponent` with the DAO via `by inject`. Reads return `Flow`
+  of models, writes are `suspend fun`. No `UiState` wrapper for local data.
+- Entities stay in the data layer. Mapping via `XxxEntity.toModel()` / `Xxx.toEntity()`. ScreenModel
+  and UI use models only, never entities.
+- Money: `Long` in tiyin everywhere (DB, models, State). Convert and format only through
+  `core/common/util/MoneyConverters` (`convertToTiyin`, `formatBalance`; create it with the first
+  feature that handles money). Never hand-written `* 100` / `/ 100`.
+- Every entity has a UUID id and `createdAt` / `updatedAt` (keeps future sync possible).
+- Balances and totals are computed with SQL aggregates, never stored.
+- Dates: kotlinx-datetime. `Instant` and `Clock` come from `kotlin.time`, not `kotlinx.datetime`.
+- Changing an existing entity changes the schema: ask how to handle the version bump / migration.
+  Room writes schemas to `shared/schemas/`; commit them.
+
+### UI
+
+- No custom design system yet: standard Material 3 components. Colors and text styles from
+  `MaterialTheme.colorScheme` / `MaterialTheme.typography`; no `Color(0x...)` in screens.
+- Input masks (e.g. amount with thousand separators): raw value in State + `VisualTransformation`
+  in `ui/components/`. Never store formatted text in State.
+
+### Strings
+
+- No hardcoded user-visible text in Kotlin, including labels, placeholders and error messages. The
+  only exception is the app name "Coinly".
+- Strings live in `ui/localization/`: `StringResources` interface grouped by feature, implemented in
+  `Russian.kt`. Composables use `LocalStrings.current`, ScreenModels use `AppRes.strings`. Not created
+  yet — set it up with the first feature that needs strings. A new language later = one more
+  implementation file.
+- Use the feature's own string group. Do not reuse another feature's strings.
+
+### Validation
+
+- Validation and building the model to save live in the ScreenModel. The submit button sends one
+  event with no data (e.g. `OnSaveClick`); the ScreenModel reads `state.value`, validates and builds
+  the model.
+- Checks run in the form's field order. The first failing check sets `errorMessage`, which is shown
+  by the screen's `AlertDialog`; `Idle` dismisses it. No per-field error flags in State.
+- Input filtering (digits only, max length) stays in the `Change*` event handler.
+
+### Do not touch without asking
+
+- `build.gradle.kts` files, `gradle/libs.versions.toml`, `gradle.properties`.
+- Root navigation in `screen/app/AppContent.kt`.
+- Koin startup: `androidApp/.../CoinlyApplication.kt`, `iosApp/iosApp/iOSApp.swift`.
+- Database version and migrations.
+
+## Dependency Version Rules
+
+- Always check `gradle/libs.versions.toml` before adding or changing a dependency. Do not guess
+  versions, do not upgrade unless asked, prefer stable releases.
+- KSP 2.3.0+ is no longer tied to the Kotlin version. The Room compiler is added per target:
+  `kspAndroid`, `kspIosArm64`, `kspIosSimulatorArm64` (the catch-all `ksp(...)` fails in KMP).
+- `androidx.sqlite:sqlite-bundled` must match the Room line (Room 3.0.x ↔ sqlite 2.7.x).
+- Room's `expect object` constructor produces an "expect/actual classes are in Beta" warning; the
+  fix is the `-Xexpect-actual-classes` compiler flag (Gradle change — ask first).
+- Voyager is no longer actively developed. Its version name is the Kotlin and Compose Multiplatform
+  versions it was built with (`2.2.21-1.10.3`), older than ours (Kotlin 2.4.20, CMP 1.12.1); this
+  combination was verified to run on Android and iOS on 2026-10-11. After upgrading Kotlin, Compose
+  Multiplatform or Voyager, run the app on the iOS simulator, not only compile it: Kotlin/Native
+  linkage problems can surface only at runtime.
+- Koin: stay on 4.2.2 or newer (4.2.0 / 4.2.1 had resolver bugs).
+
+## Architecture Overview
+
+**Stack:** Kotlin Multiplatform · Compose Multiplatform · Material 3 · Voyager (navigation + screen
+models) · Koin (DI) · Room 3 + bundled SQLite · kotlinx-datetime
+
+### Modules
+
+- `shared/` — all app code (UI, ScreenModels, data). Targets: `android`, `iosArm64`,
+  `iosSimulatorArm64`.
+- `androidApp/` — `CoinlyApplication` (calls `initKoin { androidContext(...) }`) and `MainActivity`.
+- `iosApp/` — SwiftUI wrapper: `iOSApp.swift` calls `Koin_commonKt.doInitKoin(config: nil)`,
+  `ContentView` hosts `MainViewController()` from `shared/src/iosMain`.
+
+### Package structure (`shared/src/commonMain/kotlin/com/atabekdev/coinly/`)
+
+```text
+di/                  Koin.common.kt: initKoin(), Koin modules
+screen/app/          AppContent: MaterialTheme + Voyager Navigator (root)
+screen/<feature>/    XxxScreen + XxxScreenModel + XxxState + XxxEvent
+
+# planned — create when the first feature needs it
+core/common/util/    MoneyConverters, month/date helpers
+core/database/       @Database, column type converters (builders in androidMain / iosMain)
+data/<feature>/      XxxRepository + model/ + local/ (XxxEntity, XxxDao)
+ui/components/       shared composables, VisualTransformations
+ui/localization/     StringResources, Russian, LocalStrings, AppRes
+```
+
+### Screen pattern
+
+```kotlin
+// State — immutable data class
+data class XxxState(
+    val name: String = "",
+    val isLoading: Boolean = false,
+    val saveSuccess: Boolean = false,
+    val errorMessage: String? = null,
+)
+
+// Events — sealed interface
+sealed interface XxxEvent {
+    data class ChangeName(val value: String) : XxxEvent
+    data object OnSaveClick : XxxEvent
+    data object Idle : XxxEvent
+}
+
+// ScreenModel
+class XxxScreenModel : StateScreenModel<XxxState>(XxxState()), KoinComponent {
+    private val repository by inject<XxxRepository>()
+
+    fun onEvent(event: XxxEvent) {
+        when (event) {
+            is XxxEvent.ChangeName -> setState(name = event.value)
+            XxxEvent.OnSaveClick -> save()
+            XxxEvent.Idle -> setState()
+        }
+    }
+
+    private fun save() {
+        // validate state.value in field order; first failure → setState(errorMessage = ...) and return
+        screenModelScope.launch {
+            repository.save(...)
+            setState(saveSuccess = true)
+        }
+    }
+
+    private fun setState(
+        name: String? = null,
+        loading: Boolean = false,
+        saveSuccess: Boolean = false,
+        errorMessage: String? = null,
+    ) {
+        mutableState.update {
+            it.copy(
+                name = name ?: it.name,
+                isLoading = loading,
+                saveSuccess = saveSuccess,
+                errorMessage = errorMessage,
+            )
+        }
+    }
+}
+
+// Screen
+class XxxScreen : Screen {
+    @Composable
+    override fun Content() {
+        val model = koinScreenModel<XxxScreenModel>()
+        val state by model.state.collectAsState()
+        // ...
+    }
+}
+```
+
+## Product: MVP Scope and Decisions
+
+### MVP features (build one at a time, only when asked)
+
+1. **Transactions** — income / expense: amount, category, date, note. List by month, grouped by day.
+   Edit and delete.
+2. **Categories** — default set + custom ones, separate for income and expense; icon is an emoji.
+3. **Limits** — monthly limit per expense category with progress: spent / left, warning color at
+   80%, red at 100%+.
+4. **Savings** — savings accounts ("копилки") with an optional goal amount; deposit and withdraw.
+5. **Home** — balance, income and expenses of the current month, limits, recent transactions.
+6. **Statistics** — expenses of a month by category: sum and percentage.
+
+### Agreed decisions
+
+- Single currency: UZS (store the currency code anyway).
+- One main account + savings accounts. Several regular accounts (cash, cards) is a later feature.
+- Moving money to or from savings is a `TRANSFER`, never an expense or income.
+- A limit is set once per category and applies to every month until changed. Month = calendar month.
+- Out of MVP: multi-currency, backend / sync, recurring payments, notifications, export, SMS / bank
+  import, subcategories, PIN / biometrics.
+
+### Draft data model (adjust when implementing)
+
+```text
+accounts      id, name, type (MAIN | SAVINGS), initialBalance, goalAmount?, currency, createdAt, updatedAt
+categories    id, name, emoji, type (INCOME | EXPENSE), isArchived, createdAt, updatedAt
+transactions  id, type (INCOME | EXPENSE | TRANSFER), amount, accountId, toAccountId?, categoryId?,
+              date, note, createdAt, updatedAt
+budgets       id, categoryId (unique), amount, createdAt, updatedAt
+```
+
+### Open business rules (proposed, not confirmed — ask when implementing the feature)
+
+- Initial balance: `initialBalance` field on the main account, edited by tapping the balance; no
+  onboarding.
+- Deleting a category that has transactions: archive it (hidden from pickers, kept in history).
+- Deleting a savings account: only when its balance is zero.
+- The main account may go negative (shown in red); withdrawing more than a savings account holds is
+  not allowed.
+- A transaction stores a date without time; within a day, sort by `createdAt`.
+- Amount input in whole sums (no tiyin), stored in tiyin.
+- Default categories — expense: 🛒 Продукты, 🍽 Кафе и рестораны, 🚕 Транспорт, 🎬 Развлечения,
+  🛍 Покупки, 💊 Здоровье, 📱 Связь и интернет, 🏠 Коммунальные услуги, 📦 Другое;
+  income: 💼 Зарплата, 🎁 Подарки, 💰 Другое.
