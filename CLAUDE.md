@@ -10,8 +10,9 @@ savings. Built with Kotlin Multiplatform + Compose Multiplatform for Android and
 
 - Offline-first: all data lives in a local Room database. No backend, no networking, no auth.
 - Built incrementally: MVP first, one feature at a time, each one requested explicitly.
-- Current state: Transactions feature in progress — data layer done (Room, categories,
-  transactions); edit screen and list screen are next. `HomeScreen` is still empty.
+- Current state: Transactions feature in progress — data layer and the add / edit screen
+  (`screen/transaction/edit/`) are done; the list screen with bottom tabs is next and is what
+  opens the edit screen. `HomeScreen` is still empty.
 - UI language is Russian. Localization is postponed.
 
 ## Rules (mandatory)
@@ -54,11 +55,18 @@ rule and mention the alternative in your reply.
 - Register ScreenModels as `factory` in `screenModelModule()` and repositories as `single` in
   `di/Koin.common.kt`.
 - Errors: `errorMessage` in State → Material 3 `AlertDialog` on the screen → `Idle` resets it.
+  Repository writes in the ScreenModel are wrapped in `try / catch`: rethrow
+  `CancellationException`, map any other exception to a feature string in `errorMessage`
+  (reference: `TransactionEditScreenModel.save`).
 - Screen arguments (e.g. the id of an item to edit) go to the ScreenModel constructor through Koin
   parameters: `koinScreenModel<XxxScreenModel> { parametersOf(id) }` on the screen,
   `factory { params -> XxxScreenModel(params.getOrNull()) }` in the module. The ScreenModel loads its
   data in `init`. Do not load data from a `LaunchedEffect` event: it runs again every time the
   screen returns to the composition and can overwrite user input.
+- A screen with arguments overrides `key = uniqueScreenKey`; otherwise Voyager can give a new
+  instance the cached ScreenModel of a previous one.
+- Dialogs (date picker, delete confirmation) are one-shot flags in State (`showDatePicker`,
+  `showDeleteDialog`), opened by an event and closed by `Idle`.
 - Observing a Room `Flow`: the collector updates only the observed data fields with
   `mutableState.update { it.copy(...) }` and never touches one-shot flags. This is the only allowed
   exception to "state changes through `setState`" (going through `setState` would reset e.g.
@@ -99,6 +107,10 @@ rule and mention the alternative in your reply.
 - Input masks (e.g. amount with thousand separators): raw value in State + `VisualTransformation`
   in `ui/components/`. Never store formatted text in State.
 - Icons: Material Symbols as vector drawables in `composeResources/drawable/`; no icon library.
+  Strip `android:tint="?attr/..."` and use `#FF000000` fills when adding one.
+- Category icons are emoji. The iOS 26.3 simulator draws every emoji as a "?" box, native SwiftUI
+  text included — a simulator bug, not ours; check emoji on Android or a real iPhone.
+- Material `DatePicker` shows month / weekday names in the device language (Compose limitation).
 
 ### Strings
 
