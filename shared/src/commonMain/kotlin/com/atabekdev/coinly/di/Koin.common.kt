@@ -6,6 +6,7 @@ import com.atabekdev.coinly.data.category.CategoryRepository
 import com.atabekdev.coinly.data.transaction.TransactionRepository
 import com.atabekdev.coinly.screen.home.HomeScreenModel
 import com.atabekdev.coinly.screen.transaction.edit.TransactionEditScreenModel
+import com.atabekdev.coinly.screen.transaction.list.TransactionListScreenModel
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.KoinAppDeclaration
@@ -39,4 +40,5 @@ fun repositoryModule() = module {
 fun screenModelModule() = module {
     factory { HomeScreenModel() }
     factory { params -> TransactionEditScreenModel(params.getOrNull()) }
+    factory { TransactionListScreenModel() }
 }

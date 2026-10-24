@@ -7,10 +7,18 @@ object Russian : StringResources {
         cancel = "Отмена",
         back = "Назад",
         currency = "сум",
+        monthsNominative = listOf(
+            "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+            "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+        ),
         monthsGenitive = listOf(
             "января", "февраля", "марта", "апреля", "мая", "июня",
             "июля", "августа", "сентября", "октября", "ноября", "декабря",
         ),
+    )
+
+    override val home = HomeStrings(
+        title = "Главная",
     )
 
     override val category = CategoryStrings(
@@ -29,6 +37,15 @@ object Russian : StringResources {
     )
 
     override val transaction = TransactionStrings(
+        listTitle = "Операции",
+        add = "Добавить операцию",
+        previousMonth = "Предыдущий месяц",
+        nextMonth = "Следующий месяц",
+        totalIncome = "Доходы",
+        totalExpense = "Расходы",
+        emptyMonth = "Нет операций за этот месяц",
+        today = "Сегодня",
+        yesterday = "Вчера",
         newTitle = "Новая операция",
         editTitle = "Редактирование",
         expense = "Расход",

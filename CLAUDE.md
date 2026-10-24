@@ -10,9 +10,9 @@ savings. Built with Kotlin Multiplatform + Compose Multiplatform for Android and
 
 - Offline-first: all data lives in a local Room database. No backend, no networking, no auth.
 - Built incrementally: MVP first, one feature at a time, each one requested explicitly.
-- Current state: Transactions feature in progress — data layer and the add / edit screen
-  (`screen/transaction/edit/`) are done; the list screen with bottom tabs is next and is what
-  opens the edit screen. `HomeScreen` is still empty.
+- Current state: Transactions feature done — bottom tabs, transaction list by month
+  (`screen/transaction/list/`) and add / edit screen (`screen/transaction/edit/`). The "Главная"
+  tab (`HomeScreen`) is still empty.
 - UI language is Russian. Localization is postponed.
 
 ## Rules (mandatory)
@@ -103,7 +103,9 @@ rule and mention the alternative in your reply.
 ### UI
 
 - No custom design system yet: standard Material 3 components. Colors and text styles from
-  `MaterialTheme.colorScheme` / `MaterialTheme.typography`; no `Color(0x...)` in screens.
+  `MaterialTheme.colorScheme` / `MaterialTheme.typography` or `ui/theme/Color.kt`; no `Color(0x...)`
+  in screens.
+- Amounts: income green (`IncomeColor`) with "+", expense `onSurface` with "−"; zero has no sign.
 - Input masks (e.g. amount with thousand separators): raw value in State + `VisualTransformation`
   in `ui/components/`. Never store formatted text in State.
 - Icons: Material Symbols as vector drawables in `composeResources/drawable/`; no icon library.
@@ -171,16 +173,26 @@ models) · Koin (DI) · Room 3 + bundled SQLite · kotlinx-datetime
 
 ```text
 di/                  Koin.common.kt: initKoin(), Koin modules (platformModule() is expect/actual)
-core/common/util/    MoneyConverters
+core/common/util/    MoneyConverters, DateFormatters (formatDate, formatDayMonth, formatMonth)
 core/database/       CoinlyDatabase, DateConverters, PrepopulateCallback (builders in androidMain / iosMain)
 data/<feature>/      XxxRepository + model/ + local/ (XxxEntity, XxxDao, Room relation classes)
-screen/app/          AppContent: MaterialTheme + Voyager Navigator (root)
+screen/app/          AppContent (MaterialTheme + root Navigator), MainScreen (bottom tabs)
 screen/<feature>/    XxxScreen + XxxScreenModel + XxxState + XxxEvent
+ui/components/       shared composables, visualTransformations/ (AmountVisualTransformation)
 ui/localization/     StringResources, Russian, AppRes (LocalStrings + AppRes)
-
-# planned — create when the first feature needs it
-ui/components/       shared composables, VisualTransformations
+ui/theme/            Color.kt (IncomeColor)
 ```
+
+### Navigation
+
+- `AppContent` → root `Navigator(MainScreen())`. `MainScreen` hosts a `TabNavigator` with the
+  bottom `NavigationBar`; it is a pure container, so it has no ScreenModel / State / Event.
+- A tab is an `object XxxScreen : Tab` (otherwise the usual 4-file screen) with `options`
+  (index, title from strings, icon). Add a new tab to the `NavigationBar` in `MainScreen`.
+- Tabs live in a nested navigator. Detail screens are pushed on the root one so they cover the
+  tab bar: `checkNotNull(LocalNavigator.currentOrThrow.parent).push(...)`.
+- `MainScreen` pads the tab content with `consumeWindowInsets`, so a tab's own `Scaffold` /
+  `TopAppBar` does not add system bar insets a second time.
 
 ### Screen pattern
 
@@ -267,8 +279,11 @@ class XxxScreen : Screen {
 - One main account + savings accounts. Several regular accounts (cash, cards) is a later feature.
 - Moving money to or from savings is a `TRANSFER`, never an expense or income.
 - A limit is set once per category and applies to every month until changed. Month = calendar month.
-- Navigation: bottom tabs. "Главная" and "Операции" come with Transactions; "Лимиты" and "Копилки"
-  are added with their features. Detail screens (e.g. transaction edit) open over the tabs.
+- Navigation: bottom tabs "Главная" and "Операции"; "Лимиты" and "Копилки" are added with their
+  features. Detail screens (e.g. transaction edit) open over the tabs.
+- Transaction list: one calendar month, newest first, grouped by day ("Сегодня", "Вчера",
+  "11 октября"), month income / expense totals on top. Months after the current one cannot be
+  opened (no future dates).
 - Out of MVP: multi-currency, backend / sync, recurring payments, notifications, export, SMS / bank
   import, subcategories, PIN / biometrics.
 
