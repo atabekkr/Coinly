@@ -3,6 +3,7 @@ package com.atabekdev.coinly.data.transaction
 import com.atabekdev.coinly.data.transaction.local.TransactionDao
 import com.atabekdev.coinly.data.transaction.local.TransactionEntity
 import com.atabekdev.coinly.data.transaction.local.toModel
+import com.atabekdev.coinly.data.transaction.model.CategoryExpense
 import com.atabekdev.coinly.data.transaction.model.MonthTotals
 import com.atabekdev.coinly.data.transaction.model.Transaction
 import com.atabekdev.coinly.data.transaction.model.TransactionType
@@ -29,6 +30,22 @@ class TransactionRepository : KoinComponent {
                 expense = totals.find { it.type == TransactionType.EXPENSE }?.total ?: 0L,
             )
         }
+
+    fun observeBalance(): Flow<Long> = dao.observeBalance(TransactionType.INCOME)
+
+    fun observeMonthTotalsByCategory(type: TransactionType, month: YearMonth): Flow<List<CategoryExpense>> =
+        dao.observeTotalsByCategoryBetween(type, month.firstDay, month.lastDay)
+            .map { totals ->
+                totals.map {
+                    CategoryExpense(
+                        categoryId = it.categoryId,
+                        name = it.name,
+                        emoji = it.emoji,
+                        sortOrder = it.sortOrder,
+                        amount = it.total,
+                    )
+                }
+            }
 
     suspend fun getById(id: String): Transaction? = dao.getById(id)?.toModel()
 

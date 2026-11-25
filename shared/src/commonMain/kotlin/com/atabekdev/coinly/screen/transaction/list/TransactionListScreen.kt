@@ -1,6 +1,5 @@
 package com.atabekdev.coinly.screen.transaction.list
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,46 +8,47 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cafe.adriel.voyager.navigator.tab.Tab
-import cafe.adriel.voyager.navigator.tab.TabOptions
 import coinly.shared.generated.resources.Res
 import coinly.shared.generated.resources.ic_add
-import coinly.shared.generated.resources.ic_chevron_left
-import coinly.shared.generated.resources.ic_chevron_right
-import coinly.shared.generated.resources.ic_receipt_long
+import coinly.shared.generated.resources.ic_arrow_back
+import coinly.shared.generated.resources.ic_north_east
+import coinly.shared.generated.resources.ic_south_west
 import com.atabekdev.coinly.core.common.util.formatBalance
 import com.atabekdev.coinly.core.common.util.formatDayMonth
-import com.atabekdev.coinly.core.common.util.formatMonth
-import com.atabekdev.coinly.data.transaction.model.Transaction
-import com.atabekdev.coinly.data.transaction.model.TransactionType
 import com.atabekdev.coinly.screen.transaction.edit.TransactionEditScreen
+import com.atabekdev.coinly.ui.components.ListCard
+import com.atabekdev.coinly.ui.components.ListCardDivider
+import com.atabekdev.coinly.ui.components.MonthSwitcher
+import com.atabekdev.coinly.ui.components.RoundIconButton
+import com.atabekdev.coinly.ui.components.SummaryCard
+import com.atabekdev.coinly.ui.components.TransactionRow
 import com.atabekdev.coinly.ui.localization.LocalStrings
 import com.atabekdev.coinly.ui.localization.TransactionStrings
+import com.atabekdev.coinly.ui.theme.ExpenseAccentColor
+import com.atabekdev.coinly.ui.theme.ExpenseTintColor
 import com.atabekdev.coinly.ui.theme.IncomeColor
+import com.atabekdev.coinly.ui.theme.IncomeTintColor
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -57,30 +57,56 @@ import kotlinx.datetime.todayIn
 import org.jetbrains.compose.resources.painterResource
 import kotlin.time.Clock
 
-object TransactionListScreen : Tab {
+// The full list of a month's transactions; opened over the tabs from Home's "see all".
+class TransactionListScreen : Screen {
 
-    override val options: TabOptions
-        @Composable
-        get() {
-            val title = LocalStrings.current.transaction.listTitle
-            val icon = painterResource(Res.drawable.ic_receipt_long)
-            return remember(title, icon) { TabOptions(index = 1u, title = title, icon = icon) }
-        }
-
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
-        // Tabs live in a nested navigator; the edit screen opens over the tabs in the root one.
-        val rootNavigator = checkNotNull(LocalNavigator.currentOrThrow.parent)
+        val rootNavigator = LocalNavigator.currentOrThrow
         val strings = LocalStrings.current
         val model = koinScreenModel<TransactionListScreenModel>()
         val state by model.state.collectAsState()
         val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
 
         Scaffold(
-            topBar = { TopAppBar(title = { Text(strings.transaction.listTitle) }) },
+            topBar = {
+                Row(
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    RoundIconButton(
+                        icon = painterResource(Res.drawable.ic_arrow_back),
+                        contentDescription = strings.common.back,
+                        onClick = { rootNavigator.pop() },
+                    )
+                    Text(
+                        text = strings.transaction.listTitle,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MonthSwitcher(
+                        month = state.month,
+                        nextEnabled = state.month < state.currentMonth,
+                        previousDescription = strings.transaction.previousMonth,
+                        nextDescription = strings.transaction.nextMonth,
+                        onPreviousClick = { model.onEvent(TransactionListEvent.OnPreviousMonthClick) },
+                        onNextClick = { model.onEvent(TransactionListEvent.OnNextMonthClick) },
+                    )
+                }
+            },
             floatingActionButton = {
-                FloatingActionButton(onClick = { rootNavigator.push(TransactionEditScreen()) }) {
+                FloatingActionButton(
+                    onClick = { rootNavigator.push(TransactionEditScreen()) },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
                     Icon(
                         painter = painterResource(Res.drawable.ic_add),
                         contentDescription = strings.transaction.add,
@@ -90,53 +116,30 @@ object TransactionListScreen : Tab {
         ) { innerPadding ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
-                // Keeps the last row above the floating action button.
-                contentPadding = PaddingValues(bottom = 88.dp),
+                // Bottom padding keeps the last row above the floating action button.
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 88.dp),
             ) {
                 item {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton(onClick = { model.onEvent(TransactionListEvent.OnPreviousMonthClick) }) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_chevron_left),
-                                contentDescription = strings.transaction.previousMonth,
-                            )
-                        }
-                        Text(
-                            text = formatMonth(state.month),
-                            style = MaterialTheme.typography.titleMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(
-                            onClick = { model.onEvent(TransactionListEvent.OnNextMonthClick) },
-                            enabled = state.month < state.currentMonth,
-                        ) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_chevron_right),
-                                contentDescription = strings.transaction.nextMonth,
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        TotalCard(
+                        SummaryCard(
                             title = strings.transaction.totalIncome,
                             amount = signedAmount(INCOME_SIGN, state.totals.income, strings.common.currency),
-                            color = IncomeColor,
+                            amountColor = IncomeColor,
+                            icon = painterResource(Res.drawable.ic_south_west),
+                            iconColor = IncomeColor,
+                            iconTint = IncomeTintColor,
                             modifier = Modifier.weight(1f),
                         )
-                        TotalCard(
+                        SummaryCard(
                             title = strings.transaction.totalExpense,
                             amount = signedAmount(EXPENSE_SIGN, state.totals.expense, strings.common.currency),
-                            color = MaterialTheme.colorScheme.onSurface,
+                            amountColor = MaterialTheme.colorScheme.onSurface,
+                            icon = painterResource(Res.drawable.ic_north_east),
+                            iconColor = ExpenseAccentColor,
+                            iconTint = ExpenseTintColor,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -159,78 +162,30 @@ object TransactionListScreen : Tab {
 
                 state.days.forEach { day ->
                     item(key = day.date.toString()) {
-                        Text(
-                            text = dayTitle(day.date, today, strings.transaction),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                        )
-                    }
-                    items(day.transactions, key = { it.id }) { transaction ->
-                        TransactionRow(
-                            transaction = transaction,
-                            currency = strings.common.currency,
-                            onClick = { rootNavigator.push(TransactionEditScreen(transaction.id)) },
-                        )
+                        Column {
+                            Text(
+                                text = dayTitle(day.date, today, strings.transaction),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                            )
+                            ListCard {
+                                day.transactions.forEachIndexed { index, transaction ->
+                                    if (index > 0) ListCardDivider()
+                                    TransactionRow(
+                                        transaction = transaction,
+                                        currency = strings.common.currency,
+                                        onClick = { rootNavigator.push(TransactionEditScreen(transaction.id)) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun TotalCard(
-    title: String,
-    amount: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.titleMedium,
-                color = color,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TransactionRow(
-    transaction: Transaction,
-    currency: String,
-    onClick: () -> Unit,
-) {
-    val isIncome = transaction.type == TransactionType.INCOME
-    ListItem(
-        leadingContent = {
-            Text(
-                text = transaction.category.emoji,
-                style = MaterialTheme.typography.headlineSmall,
-            )
-        },
-        headlineContent = { Text(transaction.category.name) },
-        supportingContent = if (transaction.note.isNotBlank()) {
-            { Text(text = transaction.note, maxLines = 1) }
-        } else {
-            null
-        },
-        trailingContent = {
-            Text(
-                text = signedAmount(if (isIncome) INCOME_SIGN else EXPENSE_SIGN, transaction.amount, currency),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isIncome) IncomeColor else MaterialTheme.colorScheme.onSurface,
-            )
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
 }
 
 private const val INCOME_SIGN = "+"

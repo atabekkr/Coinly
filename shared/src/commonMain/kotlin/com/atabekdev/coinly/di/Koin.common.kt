@@ -2,9 +2,13 @@ package com.atabekdev.coinly.di
 
 import com.atabekdev.coinly.core.database.CoinlyDatabase
 import com.atabekdev.coinly.core.database.createDatabase
+import com.atabekdev.coinly.data.budget.BudgetRepository
 import com.atabekdev.coinly.data.category.CategoryRepository
 import com.atabekdev.coinly.data.transaction.TransactionRepository
+import com.atabekdev.coinly.screen.budget.edit.BudgetEditScreenModel
+import com.atabekdev.coinly.screen.budget.list.BudgetListScreenModel
 import com.atabekdev.coinly.screen.home.HomeScreenModel
+import com.atabekdev.coinly.screen.report.ReportScreenModel
 import com.atabekdev.coinly.screen.transaction.edit.TransactionEditScreenModel
 import com.atabekdev.coinly.screen.transaction.list.TransactionListScreenModel
 import org.koin.core.context.startKoin
@@ -30,15 +34,20 @@ fun databaseModule() = module {
     single { createDatabase(get()) }
     single { get<CoinlyDatabase>().categoryDao() }
     single { get<CoinlyDatabase>().transactionDao() }
+    single { get<CoinlyDatabase>().budgetDao() }
 }
 
 fun repositoryModule() = module {
     single { CategoryRepository() }
     single { TransactionRepository() }
+    single { BudgetRepository() }
 }
 
 fun screenModelModule() = module {
     factory { HomeScreenModel() }
+    factory { BudgetListScreenModel() }
+    factory { params -> BudgetEditScreenModel(params.getOrNull()) }
+    factory { ReportScreenModel() }
     factory { params -> TransactionEditScreenModel(params.getOrNull()) }
     factory { TransactionListScreenModel() }
 }

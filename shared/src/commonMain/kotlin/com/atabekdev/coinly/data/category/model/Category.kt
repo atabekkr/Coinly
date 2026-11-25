@@ -7,4 +7,5 @@ data class Category(
     val name: String,
     val emoji: String,
     val type: TransactionType,
+    val sortOrder: Int,
 )

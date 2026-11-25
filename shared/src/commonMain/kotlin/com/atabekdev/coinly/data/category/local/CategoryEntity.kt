@@ -21,4 +21,5 @@ fun CategoryEntity.toModel() = Category(
     name = name,
     emoji = emoji,
     type = type,
+    sortOrder = sortOrder,
 )

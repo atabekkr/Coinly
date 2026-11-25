@@ -3,6 +3,11 @@ package com.atabekdev.coinly.ui.localization
 interface StringResources {
     val common: CommonStrings
     val home: HomeStrings
+    val report: ReportStrings
+    val budget: BudgetStrings
+    val settings: SettingsStrings
+    val profile: ProfileStrings
+    val notification: NotificationStrings
     val category: CategoryStrings
     val transaction: TransactionStrings
 }
@@ -11,13 +16,87 @@ class CommonStrings(
     val ok: String,
     val cancel: String,
     val back: String,
+    val close: String,
     val currency: String,
+    val inDevelopment: String,
+    val inDevelopmentHint: String,
     // Month names, January first. Nominative: "Октябрь 2026"; genitive: "11 октября".
     val monthsNominative: List<String>,
     val monthsGenitive: List<String>,
 )
 
 class HomeStrings(
+    val title: String,
+    val profile: String,
+    val notifications: String,
+    val previousMonth: String,
+    val nextMonth: String,
+    val totalBalance: String,
+    val thisMonth: String,
+    val income: String,
+    val expenses: String,
+    val transactions: String,
+    val seeAll: String,
+    val transactionsEmpty: String,
+    val today: String,
+    val yesterday: String,
+)
+
+class ReportStrings(
+    val title: String,
+    val previousMonth: String,
+    val nextMonth: String,
+    val expenses: String,
+    val income: String,
+    val total: String,
+    val dailyAverage: String,
+    val topCategory: String,
+    val byCategory: String,
+    val expensesEmpty: String,
+    val incomeEmpty: String,
+    val lessThanOnePercent: String,
+)
+
+class BudgetStrings(
+    val title: String,
+    val add: String,
+    // Followed by the month name in lower case: "Бюджет на ноябрь".
+    val monthBudget: String,
+    val leftOf: String,
+    val spent: String,
+    // Followed by a number: "Осталось дней: 15".
+    val daysLeft: String,
+    val categories: String,
+    val of: String,
+    val left: String,
+    val overBy: String,
+    val empty: String,
+    val emptyHint: String,
+    val newTitle: String,
+    val editTitle: String,
+    val allBudgeted: String,
+    val deleteDigit: String,
+    val save: String,
+    val delete: String,
+    val deleteTitle: String,
+    val deleteMessage: String,
+    val errorEmptyAmount: String,
+    val errorNoCategory: String,
+    val errorNotFound: String,
+    val errorSave: String,
+    val errorDelete: String,
+)
+
+class SettingsStrings(
+    val title: String,
+    val version: String,
+)
+
+class ProfileStrings(
+    val title: String,
+)
+
+class NotificationStrings(
     val title: String,
 )
 
@@ -51,11 +130,14 @@ class TransactionStrings(
     val expense: String,
     val income: String,
     val amount: String,
+    val deleteDigit: String,
     val category: String,
     val date: String,
     val selectDate: String,
     val note: String,
     val save: String,
+    val saveExpense: String,
+    val saveIncome: String,
     val delete: String,
     val deleteTitle: String,
     val deleteMessage: String,

@@ -1,42 +1,46 @@
 package com.atabekdev.coinly.screen.transaction.edit
 
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SelectableDates
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.core.screen.ScreenKey
@@ -45,13 +49,21 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coinly.shared.generated.resources.Res
-import coinly.shared.generated.resources.ic_arrow_back
 import coinly.shared.generated.resources.ic_calendar_today
+import coinly.shared.generated.resources.ic_close
 import coinly.shared.generated.resources.ic_delete
+import coinly.shared.generated.resources.ic_edit
+import com.atabekdev.coinly.core.common.util.convertToTiyin
+import com.atabekdev.coinly.core.common.util.formatBalance
 import com.atabekdev.coinly.core.common.util.formatDate
 import com.atabekdev.coinly.data.transaction.model.TransactionType
-import com.atabekdev.coinly.ui.components.visualTransformations.AmountVisualTransformation
+import com.atabekdev.coinly.ui.components.AmountKeypad
+import com.atabekdev.coinly.ui.components.CategoryGrid
+import com.atabekdev.coinly.ui.components.PrimaryButton
+import com.atabekdev.coinly.ui.components.RoundIconButton
+import com.atabekdev.coinly.ui.components.SegmentedControl
 import com.atabekdev.coinly.ui.localization.LocalStrings
+import com.atabekdev.coinly.ui.theme.IncomeColor
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -77,128 +89,175 @@ class TransactionEditScreen(
         val strings = LocalStrings.current
         val model = koinScreenModel<TransactionEditScreenModel> { parametersOf(transactionId) }
         val state by model.state.collectAsState()
+        val focusManager = LocalFocusManager.current
 
         LaunchedEffect(state.saveSuccess, state.deleteSuccess) {
             if (state.saveSuccess || state.deleteSuccess) navigator.pop()
         }
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            if (state.isEditMode) strings.transaction.editTitle
-                            else strings.transaction.newTitle
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { navigator.pop() }) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_arrow_back),
-                                contentDescription = strings.common.back,
+        Scaffold { innerPadding ->
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                // The on-screen keypad enters the amount; the system keyboard is only for the note.
+                // A tap outside the note field closes it; tiles and keys clear focus in their handlers.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
+                        .verticalScroll(rememberScrollState())
+                        // At least one screen tall, so the amount sits in the free space between
+                        // the top and bottom blocks; on a short screen the content scrolls.
+                        .heightIn(min = maxHeight)
+                        .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RoundIconButton(
+                                icon = painterResource(Res.drawable.ic_close),
+                                contentDescription = strings.common.close,
+                                onClick = { navigator.pop() },
                             )
-                        }
-                    },
-                    actions = {
-                        if (state.isEditMode) {
-                            IconButton(onClick = { model.onEvent(TransactionEditEvent.OnDeleteClick) }) {
-                                Icon(
-                                    painter = painterResource(Res.drawable.ic_delete),
+                            Text(
+                                text = if (state.isEditMode) strings.transaction.editTitle
+                                else strings.transaction.newTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (state.isEditMode) {
+                                RoundIconButton(
+                                    icon = painterResource(Res.drawable.ic_delete),
                                     contentDescription = strings.transaction.delete,
+                                    onClick = { model.onEvent(TransactionEditEvent.OnDeleteClick) },
                                 )
+                            } else {
+                                // Keeps the title centred.
+                                Spacer(modifier = Modifier.size(ROUND_BUTTON_SIZE))
                             }
                         }
-                    },
-                )
-            },
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                val types = listOf(
-                    TransactionType.EXPENSE to strings.transaction.expense,
-                    TransactionType.INCOME to strings.transaction.income,
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    types.forEachIndexed { index, (type, label) ->
-                        SegmentedButton(
-                            selected = state.type == type,
-                            onClick = { model.onEvent(TransactionEditEvent.ChangeType(type)) },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = types.size),
-                        ) {
-                            Text(label)
-                        }
-                    }
-                }
 
-                OutlinedTextField(
-                    value = state.amount,
-                    onValueChange = { model.onEvent(TransactionEditEvent.ChangeAmount(it)) },
-                    label = { Text(strings.transaction.amount) },
-                    suffix = { Text(strings.common.currency) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = remember { AmountVisualTransformation() },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text(
-                    text = strings.transaction.category,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.categories.filter { it.type == state.type }.forEach { category ->
-                        FilterChip(
-                            selected = category.id == state.selectedCategoryId,
-                            onClick = { model.onEvent(TransactionEditEvent.ChangeCategory(category.id)) },
-                            label = { Text("${category.emoji} ${category.name}") },
+                        val types = listOf(
+                            TransactionType.EXPENSE to strings.transaction.expense,
+                            TransactionType.INCOME to strings.transaction.income,
+                        )
+                        SegmentedControl(
+                            options = types.map { it.second },
+                            selectedIndex = types.indexOfFirst { it.first == state.type },
+                            onSelect = { index ->
+                                focusManager.clearFocus()
+                                model.onEvent(TransactionEditEvent.ChangeType(types[index].first))
+                            },
                         )
                     }
-                }
 
-                // A read-only text field has no onClick, so the picker opens on its press interaction.
-                val dateInteractionSource = remember { MutableInteractionSource() }
-                LaunchedEffect(dateInteractionSource) {
-                    dateInteractionSource.interactions.collect { interaction ->
-                        if (interaction is PressInteraction.Release) {
-                            model.onEvent(TransactionEditEvent.OnDateClick)
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = formatDate(state.date),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text(strings.transaction.date) },
-                    trailingIcon = {
-                        Icon(
-                            painter = painterResource(Res.drawable.ic_calendar_today),
-                            contentDescription = strings.transaction.selectDate,
+                    AmountDisplay(
+                        amount = state.amount,
+                        type = state.type,
+                        currency = strings.common.currency,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CategoryGrid(
+                            categories = state.categories.filter { it.type == state.type },
+                            selectedCategoryId = state.selectedCategoryId,
+                            onCategoryClick = { categoryId ->
+                                focusManager.clearFocus()
+                                model.onEvent(TransactionEditEvent.ChangeCategory(categoryId))
+                            },
                         )
-                    },
-                    interactionSource = dateInteractionSource,
-                    modifier = Modifier.fillMaxWidth(),
-                )
 
-                OutlinedTextField(
-                    value = state.note,
-                    onValueChange = { model.onEvent(TransactionEditEvent.ChangeNote(it)) },
-                    label = { Text(strings.transaction.note) },
-                    supportingText = { Text("${state.note.length}/$MAX_NOTE_LENGTH") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    model.onEvent(TransactionEditEvent.OnDateClick)
+                                },
+                                modifier = Modifier.weight(1f).height(FIELD_HEIGHT),
+                                shape = FieldShape,
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.ic_calendar_today),
+                                        contentDescription = strings.transaction.selectDate,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(
+                                        text = formatDate(state.date),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
 
-                Button(
-                    onClick = { model.onEvent(TransactionEditEvent.OnSaveClick) },
-                    enabled = !state.isLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(strings.transaction.save)
+                            BasicTextField(
+                                value = state.note,
+                                onValueChange = { model.onEvent(TransactionEditEvent.ChangeNote(it)) },
+                                textStyle = MaterialTheme.typography.labelLarge
+                                    .copy(color = MaterialTheme.colorScheme.onSurface),
+                                maxLines = 1,
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { innerTextField ->
+                                    Row(
+                                        modifier = Modifier
+                                            .height(FIELD_HEIGHT)
+                                            .background(MaterialTheme.colorScheme.surface, FieldShape)
+                                            .padding(horizontal = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(Res.drawable.ic_edit),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            if (state.note.isEmpty()) {
+                                                Text(
+                                                    text = strings.transaction.note,
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    }
+                                },
+                            )
+                        }
+
+                        AmountKeypad(
+                            deleteDescription = strings.transaction.deleteDigit,
+                            onDigitClick = { digit ->
+                                focusManager.clearFocus()
+                                model.onEvent(TransactionEditEvent.ChangeAmount(state.amount + digit))
+                            },
+                            onDeleteClick = {
+                                focusManager.clearFocus()
+                                model.onEvent(TransactionEditEvent.ChangeAmount(state.amount.dropLast(1)))
+                            },
+                        )
+
+                        PrimaryButton(
+                            text = if (state.type == TransactionType.EXPENSE) strings.transaction.saveExpense
+                            else strings.transaction.saveIncome,
+                            onClick = {
+                                focusManager.clearFocus()
+                                model.onEvent(TransactionEditEvent.OnSaveClick)
+                            },
+                            enabled = !state.isLoading,
+                        )
+                    }
                 }
             }
         }
@@ -269,6 +328,52 @@ class TransactionEditScreen(
         }
     }
 }
+
+// Whole sums with thousand separators; the text shrinks as the amount gets longer.
+@Composable
+private fun AmountDisplay(
+    amount: String,
+    type: TransactionType,
+    currency: String,
+    modifier: Modifier = Modifier,
+) {
+    val sums = amount.toLongOrNull() ?: 0L
+    val isIncome = type == TransactionType.INCOME
+    // Zero gets no sign.
+    val sign = if (sums == 0L) "" else if (isIncome) INCOME_SIGN else EXPENSE_SIGN
+    val style = when {
+        amount.length <= 6 -> MaterialTheme.typography.displayMedium
+        amount.length <= 9 -> MaterialTheme.typography.displaySmall
+        else -> MaterialTheme.typography.headlineLarge
+    }
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = "$sign${formatBalance(convertToTiyin(sums))}",
+            style = style,
+            color = if (isIncome) IncomeColor else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.alignByBaseline(),
+        )
+        Text(
+            text = " $currency",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.alignByBaseline(),
+        )
+    }
+}
+
+// Same size as RoundIconButton.
+private val ROUND_BUTTON_SIZE = 44.dp
+private val FIELD_HEIGHT = 48.dp
+private val FieldShape = RoundedCornerShape(14.dp)
+private const val INCOME_SIGN = "+"
+private const val EXPENSE_SIGN = "−"
 
 // Material DatePicker works with UTC midnight milliseconds.
 private fun LocalDate.toPickerMillis(): Long = atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()

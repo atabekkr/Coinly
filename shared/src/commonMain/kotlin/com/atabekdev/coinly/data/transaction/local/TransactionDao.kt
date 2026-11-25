@@ -18,6 +18,23 @@ interface TransactionDao {
     @Query("SELECT type, SUM(amount) AS total FROM transactions WHERE date BETWEEN :from AND :to GROUP BY type")
     fun observeTotalsBetween(from: LocalDate, to: LocalDate): Flow<List<TransactionTotal>>
 
+    // Income minus expenses over all time; 0 when there are no transactions.
+    @Query("SELECT COALESCE(SUM(CASE WHEN type = :income THEN amount ELSE -amount END), 0) FROM transactions")
+    fun observeBalance(income: TransactionType): Flow<Long>
+
+    @Query(
+        "SELECT c.id AS categoryId, c.name AS name, c.emoji AS emoji, c.sortOrder AS sortOrder, " +
+            "SUM(t.amount) AS total " +
+            "FROM transactions t INNER JOIN categories c ON c.id = t.categoryId " +
+            "WHERE t.type = :type AND t.date BETWEEN :from AND :to " +
+            "GROUP BY c.id ORDER BY total DESC, c.sortOrder"
+    )
+    fun observeTotalsByCategoryBetween(
+        type: TransactionType,
+        from: LocalDate,
+        to: LocalDate,
+    ): Flow<List<CategoryTotal>>
+
     @Transaction
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: String): TransactionWithCategory?
