@@ -10,9 +10,16 @@ savings. Built with Kotlin Multiplatform + Compose Multiplatform for Android and
 
 - Offline-first: all data lives in a local Room database. No backend, no networking, no auth.
 - Built incrementally: MVP first, one feature at a time, each one requested explicitly.
-- Current state: Transactions feature done — bottom tabs, transaction list by month
-  (`screen/transaction/list/`) and add / edit screen (`screen/transaction/edit/`). The "Главная"
-  tab (`HomeScreen`) is still empty.
+- Current state:
+  - Transactions: list by month (`screen/transaction/list/`) and add / edit screen
+    (`screen/transaction/edit/`).
+  - Home (`screen/home/`): balance, the month's income / expenses and recent transactions.
+  - Report (`screen/report/`): a month's expenses or income by category as a ring and a list.
+  - Limits (`screen/budget/list/`, `screen/budget/edit/`): monthly limit per expense category.
+  - Not built: Savings (the "Goals" block of the Budgets design), custom categories, Settings,
+    Profile, Notifications. The last three are "in development" placeholder screens.
+- The look follows the design handoff in `docs/design/` (README with tokens, screenshots, HTML
+  sources). `CLAUDE.md` wins where they disagree.
 - UI language is Russian. Localization is postponed.
 
 ## Rules (mandatory)
@@ -44,6 +51,13 @@ rule and mention the alternative in your reply.
   `screen/<feature>/` for a single-screen feature (e.g. `screen/home/`) or in
   `screen/<feature>/<screen_name>/` when the feature has several screens
   (e.g. `screen/transaction/edit/`).
+- Exception: a placeholder for a feature that is not built yet (`screen/settings/`,
+  `screen/profile/`, `screen/notification/`) is a single `XxxScreen.kt` whose body is the
+  `InDevelopment` component. It has no state, so no ScreenModel / State / Event. When the feature
+  is built, it becomes a normal 4-file screen.
+- An amount form (new transaction, new limit) follows `TransactionEditScreen` /
+  `BudgetEditScreen`: round close button and centred title, the amount shown large, `CategoryGrid`,
+  `AmountKeypad`, `PrimaryButton`.
 - Screen: Voyager `class XxxScreen : Screen` with `@Composable override fun Content()`; gets the model
   via `koinScreenModel()` and reads `model.state.collectAsState()`.
 - Event: `sealed interface XxxEvent`. Reset event is `data object Idle`.
@@ -51,7 +65,10 @@ rule and mention the alternative in your reply.
   `by inject<...>()`, one public `fun onEvent(event)` with `when`, state changes through the
   private `setState(...)`.
 - `setState` convention: one-shot flags (`loading`, `errorMessage`, `saveSuccess`, ...) default to
-  reset; persistent data defaults to `?: it.field`. A new State field must also be added to `setState`.
+  reset; persistent data defaults to `?: it.field`. A new State field must also be added to
+  `setState`, except a value set once when the ScreenModel is created and never changed (e.g.
+  `currentMonth` in `TransactionListState` and `HomeState`) and the data fields written by a Room
+  `Flow` collector (see "Observing a Room `Flow`" below).
 - Register ScreenModels as `factory` in `screenModelModule()` and repositories as `single` in
   `di/Koin.common.kt`.
 - Errors: `errorMessage` in State → Material 3 `AlertDialog` on the screen → `Idle` resets it.
@@ -96,20 +113,57 @@ rule and mention the alternative in your reply.
 - Every entity has a UUID id and `createdAt` / `updatedAt` (keeps future sync possible).
 - Balances and totals are computed with SQL aggregates, never stored.
 - Dates: kotlinx-datetime. `Instant` and `Clock` come from `kotlin.time`, not `kotlinx.datetime`.
-- Schema changes before the first release: bump the database version; the destructive migration
-  wipes the data. After the first release: real migrations — ask first. Room writes schemas to
-  `shared/schemas/`; commit them.
+- Schema changes: bump the database version and add a migration — ask first. Prefer
+  `AutoMigration(from, to)` in `@Database(autoMigrations = ...)` when Room can generate it.
+  There is no destructive fallback: real data already lives on a device, so a missing migration
+  must fail instead of wiping it. Room writes schemas to `shared/schemas/`; commit them (auto
+  migrations are generated from them).
 
 ### UI
 
-- No custom design system yet: standard Material 3 components. Colors and text styles from
-  `MaterialTheme.colorScheme` / `MaterialTheme.typography` or `ui/theme/Color.kt`; no `Color(0x...)`
-  in screens.
+- Theme: `CoinlyTheme` (`ui/theme/Theme.kt`) wraps Material 3 with the design's color scheme,
+  typography (`Type.kt`) and shapes; `AppContent` applies it. Light theme only — no dark theme was
+  designed.
+- Colors: screens take them from `MaterialTheme.colorScheme` or the named colors in
+  `ui/theme/Color.kt` (`IncomeColor`, `ExpenseAccentColor`, `WarningBarColor`, `Hero*Color`, ...).
+  No `Color(0x...)` in screens; a new color is a new named value in `Color.kt`.
+- Color scheme roles: `primary` violet (hero, "+" button, primary button, active tab),
+  `background` screen ground, `surface` white cards, `onSurfaceVariant` secondary text,
+  `outlineVariant` dividers and neutral bar tracks, `surfaceVariant` control tracks,
+  `primaryContainer` violet tint, `error` / `errorContainer` over-limit.
+- Font: Inter only (`composeResources/font/`, weights 400 / 500 / 600 / 700). The design's Space
+  Grotesk is not used: it has no Cyrillic.
+- Text styles come from `MaterialTheme.typography`; each slot's use is commented in `Type.kt`
+  (e.g. `headlineSmall` screen title, `titleLarge` section heading, `titleSmall` row title,
+  `titleMedium` row amount, `bodySmall` secondary line, `labelSmall` tab label). Do not hand-write
+  font sizes in screens.
+- Shapes: `MaterialTheme.shapes` — `large` (20) list and summary cards, `extraLarge` (24) chart
+  and hero cards, `medium` (16) tiles, `small` (12) emoji tiles and segments.
+- Layout: screen side padding 20, card inner padding 16, touch targets at least 44.
+- Shared components in `ui/components/` — use them instead of rebuilding the same look:
+  `ScreenHeader` (tab title + trailing control), `MonthSwitcher` (pill with ‹ ›), `ListCard` +
+  `ListCardDivider`, `TransactionRow`, `SummaryCard`, `EmojiTile`, `SegmentedControl`,
+  `CategoryGrid`, `AmountKeypad`, `PrimaryButton`, `RoundIconButton`, `InDevelopment`.
 - Amounts: income green (`IncomeColor`) with "+", expense `onSurface` with "−"; zero has no sign.
-- Input masks (e.g. amount with thousand separators): raw value in State + `VisualTransformation`
-  in `ui/components/`. Never store formatted text in State.
-- Icons: Material Symbols as vector drawables in `composeResources/drawable/`; no icon library.
-  Strip `android:tint="?attr/..."` and use `#FF000000` fills when adding one.
+  Exceptions, where a label already says what the amount is, so it has no sign and no color: the
+  Report breakdown (under the "Расходы" / "Доходы" switch), the income / expense cards on Home,
+  and the Budgets screen.
+- The currency word follows the number (`strings.common.currency`); next to a large amount (hero
+  balance, entered amount) it is a smaller, secondary-colored text.
+- Category colors: `categoryColor(sortOrder)` (= `CategoryColors[sortOrder % size]`) in charts
+  and bars, `categoryTint(sortOrder)` for the emoji tile background, both in `ui/theme/Color.kt`.
+  A category's color never depends on its share or rank.
+- Amount input: the on-screen `AmountKeypad` (digits and backspace, no decimal key) sends
+  `ChangeAmount(state.amount + digit)`; State keeps the raw digits and the screen formats them
+  with `formatBalance(convertToTiyin(...))`. Never store formatted text in State. The system
+  keyboard is used only for free text (the note). `AmountVisualTransformation` is the pattern for
+  a masked text field and is currently unused.
+- Limit states on Budgets: normal below 80% of the limit (`primary` on `primaryContainer`),
+  warning from 80% (`WarningBarColor` on `ExpenseTintColor`, text `ExpenseAccentColor`), danger
+  from 100% (`error` on `errorContainer`).
+- Icons: vector drawables in `composeResources/drawable/`; no icon library. Either Material
+  Symbols (960 viewport) or classic Material Icons (24 viewport). Strip
+  `android:tint="?attr/..."` and use `#FF000000` fills when adding one.
 - Category icons are emoji. The iOS 26.3 simulator draws every emoji as a "?" box, native SwiftUI
   text included — a simulator bug, not ours; check emoji on Android or a real iPhone.
 - Material `DatePicker` shows month / weekday names in the device language (Compose limitation).
@@ -122,7 +176,8 @@ rule and mention the alternative in your reply.
   `Russian.kt` (each group is a class, e.g. `CategoryStrings`). Composables use
   `LocalStrings.current`, ScreenModels use `AppRes.strings`. A new language later = one more
   implementation file.
-- Use the feature's own string group. Do not reuse another feature's strings.
+- Use the feature's own string group. Do not reuse another feature's strings. `common` holds what
+  shared components show (OK, cancel, back, close, currency, month names, "В разработке").
 
 ### Validation
 
@@ -138,7 +193,7 @@ rule and mention the alternative in your reply.
 - `build.gradle.kts` files, `gradle/libs.versions.toml`, `gradle.properties`.
 - Root navigation in `screen/app/AppContent.kt`.
 - Koin startup: `androidApp/.../CoinlyApplication.kt`, `iosApp/iosApp/iOSApp.swift`.
-- Database migrations (after the first release).
+- Database migrations.
 
 ## Dependency Version Rules
 
@@ -176,23 +231,38 @@ di/                  Koin.common.kt: initKoin(), Koin modules (platformModule() 
 core/common/util/    MoneyConverters, DateFormatters (formatDate, formatDayMonth, formatMonth)
 core/database/       CoinlyDatabase, DateConverters, PrepopulateCallback (builders in androidMain / iosMain)
 data/<feature>/      XxxRepository + model/ + local/ (XxxEntity, XxxDao, Room relation classes)
-screen/app/          AppContent (MaterialTheme + root Navigator), MainScreen (bottom tabs)
+screen/app/          AppContent (CoinlyTheme + root Navigator), MainScreen (bottom tabs)
 screen/<feature>/    XxxScreen + XxxScreenModel + XxxState + XxxEvent
 ui/components/       shared composables, visualTransformations/ (AmountVisualTransformation)
 ui/localization/     StringResources, Russian, AppRes (LocalStrings + AppRes)
-ui/theme/            Color.kt (IncomeColor)
+ui/theme/            Theme.kt (CoinlyTheme), Type.kt (Inter typography), Color.kt (tokens, CategoryColors)
 ```
+
+Features: `data/category/`, `data/transaction/`, `data/budget/`; `screen/home/`, `screen/report/`,
+`screen/budget/list/`, `screen/budget/edit/`, `screen/transaction/list/`,
+`screen/transaction/edit/`, and the placeholders `screen/settings/`, `screen/profile/`,
+`screen/notification/`.
 
 ### Navigation
 
-- `AppContent` → root `Navigator(MainScreen())`. `MainScreen` hosts a `TabNavigator` with the
-  bottom `NavigationBar`; it is a pure container, so it has no ScreenModel / State / Event.
+- `AppContent` → root `Navigator(MainScreen())`. `MainScreen` hosts a `TabNavigator` and draws the
+  bottom bar itself (not the Material `NavigationBar`): a white bar with a notch and the round "+"
+  button in the centre. It is a pure container, so it has no ScreenModel / State / Event.
+- Tabs, in order: `HomeScreen`, `ReportScreen`, "+", `BudgetListScreen`, `SettingsScreen`. The "+"
+  button is not a tab: it pushes `TransactionEditScreen()` on the root navigator.
 - A tab is an `object XxxScreen : Tab` (otherwise the usual 4-file screen) with `options`
-  (index, title from strings, icon). Add a new tab to the `NavigationBar` in `MainScreen`.
+  (index, title from strings, icon). The bar has four tab slots around the "+"; adding a fifth
+  tab is a design decision — ask first.
 - Tabs live in a nested navigator. Detail screens are pushed on the root one so they cover the
-  tab bar: `checkNotNull(LocalNavigator.currentOrThrow.parent).push(...)`.
-- `MainScreen` pads the tab content with `consumeWindowInsets`, so a tab's own `Scaffold` /
-  `TopAppBar` does not add system bar insets a second time.
+  tab bar: `checkNotNull(LocalNavigator.currentOrThrow.parent).push(...)`. Pushed from Home:
+  `TransactionListScreen` ("Все"), `TransactionEditScreen`, `ProfileScreen`, `NotificationScreen`;
+  from Budgets: `BudgetEditScreen`.
+- Insets: `MainScreen` pads the tab content by the bar height and consumes the navigation bar
+  inset, so a tab does not add the bottom inset again. The top inset is left to the screens,
+  because the Home hero runs under the status bar: a tab or pushed screen with a `ScreenHeader`
+  (or its own header row) adds `Modifier.statusBarsPadding()` to it.
+- A screen pushed on the root navigator has a `RoundIconButton` in its header: back arrow for a
+  list or placeholder, close "X" for an amount form.
 
 ### Screen pattern
 
@@ -260,18 +330,43 @@ class XxxScreen : Screen {
 }
 ```
 
+## Planning: OpenSpec
+
+Larger changes are planned and tracked with OpenSpec (CLI `openspec`, config in
+`openspec/config.yaml`, schema `spec-driven`). For a task that needs a plan (more than one layer or
+~3 files), the plan can be an OpenSpec change.
+
+- `openspec/specs/<capability>/spec.md` — main specs: the current behavior of a capability (e.g.
+  `home-expense-breakdown`). They are updated when a change is archived or synced. Note:
+  `home-expense-breakdown` describes the breakdown that now lives on the Report tab; the redesign
+  and the Limits feature were built without OpenSpec changes, so the specs do not cover them yet.
+- `openspec/changes/<name>/` — one change in progress: `proposal.md`, a delta spec in
+  `specs/<capability>/spec.md` (ADDED / MODIFIED / REMOVED / RENAMED requirements), `design.md` and
+  `tasks.md`. A finished change is moved to `openspec/changes/archive/YYYY-MM-DD-<name>/`.
+- Commands (`.claude/commands/opsx/`): `/opsx:explore` (think it through), `/opsx:propose` (create
+  the change and its artifacts; planning only, no code), `/opsx:apply` (implement `tasks.md` and tick
+  the checkboxes), `/opsx:archive` (merge the delta specs into `openspec/specs/` and archive),
+  `/opsx:sync`, `/opsx:update`. Check a change with `openspec validate "<name>" --strict`.
+- The project has no automated tests, so tasks are verified by building
+  (`./gradlew :androidApp:assembleDebug`, `./gradlew :shared:compileKotlinIosSimulatorArm64`) and by
+  reading the code against the spec.
+
 ## Product: MVP Scope and Decisions
 
 ### MVP features (build one at a time, only when asked)
 
-1. **Transactions** — income / expense: amount, category, date, note. List by month, grouped by day.
-   Edit and delete.
-2. **Categories** — default set + custom ones, separate for income and expense; icon is an emoji.
-3. **Limits** — monthly limit per expense category with progress: spent / left, warning color at
-   80%, red at 100%+.
-4. **Savings** — savings accounts ("копилки") with an optional goal amount; deposit and withdraw.
-5. **Home** — balance, income and expenses of the current month, limits, recent transactions.
-6. **Statistics** — expenses of a month by category: sum and percentage.
+1. **Transactions** (done) — income / expense: amount, category, date, note. List by month, grouped
+   by day. Edit and delete.
+2. **Categories** (default set only) — default set + custom ones, separate for income and expense;
+   icon is an emoji.
+3. **Limits** (done, "Бюджеты" tab) — monthly limit per expense category with progress: spent /
+   left, warning color at 80%, red at 100%+.
+4. **Savings** (not built) — savings accounts ("копилки") with an optional goal amount; deposit and
+   withdraw. In the design it is the "Goals" block of the Budgets screen.
+5. **Home** (done, without limits) — balance, income and expenses of the month, recent
+   transactions.
+6. **Statistics** (done, "Отчёт" tab) — expenses or income of a month by category: sum and
+   percentage.
 
 ### Agreed decisions
 
@@ -279,11 +374,36 @@ class XxxScreen : Screen {
 - One main account + savings accounts. Several regular accounts (cash, cards) is a later feature.
 - Moving money to or from savings is a `TRANSFER`, never an expense or income.
 - A limit is set once per category and applies to every month until changed. Month = calendar month.
-- Navigation: bottom tabs "Главная" and "Операции"; "Лимиты" and "Копилки" are added with their
-  features. Detail screens (e.g. transaction edit) open over the tabs.
+- Navigation: bottom tabs "Главная", "Отчёт", "Бюджеты", "Настройки" with a centre "+" button
+  (new transaction). The transaction list is not a tab: it opens from "Все" on Home. Detail
+  screens (e.g. transaction edit) open over the tabs.
+- Month switcher (Home, Report, transaction list): opens on the current month, back without
+  limit, no months after the current one (no future dates); the chosen month is not remembered.
 - Transaction list: one calendar month, newest first, grouped by day ("Сегодня", "Вчера",
-  "11 октября"), month income / expense totals on top. Months after the current one cannot be
-  opened (no future dates).
+  "11 октября"), month income / expense totals on top.
+- Home:
+  - Balance = all income minus all expenses over all time (SQL aggregate). There is no initial
+    balance and no account yet; the balance does not depend on the chosen month.
+  - Under the balance: the chosen month's income minus expenses ("+… сум за месяц").
+  - Income / expense cards of the chosen month.
+  - The 10 newest transactions of the chosen month, grouped by day ("Сегодня, 15 ноября",
+    "Вчера, 14 ноября", "11 ноября"); the second line of a row is the note (transactions have no
+    time).
+  - The avatar shows "C" (app name initial); it and the bell open placeholder screens.
+- Report: expenses or income (switch) of one calendar month by category — ring + list, biggest
+  first; the row bar is scaled to the biggest category, the percent is the share of the total
+  ("<1%" below 1%). "В среднем за день" = total / days passed for the current month, / days in
+  the month for a past one, rounded down to whole sums. "Топ-категория" = the biggest category.
+- Budgets (limits):
+  - One limit per expense category; the category of an existing limit cannot be changed (delete
+    and create again). A new limit offers only expense categories without one.
+  - Limit amount in whole sums, > 0, at most 12 digits.
+  - The screen shows the current month only, no month switcher.
+  - Month budget = sum of all limits; spent = the month's expenses in the categories that have a
+    limit; left may be negative ("−"). Percent spent is rounded down and may exceed 100.
+  - "Осталось дней" = days of the month after today.
+- Placeholder screens (Settings, Profile, Notifications) show "В разработке"; notifications stay
+  out of MVP.
 - Out of MVP: multi-currency, backend / sync, recurring payments, notifications, export, SMS / bank
   import, subcategories, PIN / biometrics.
 
@@ -293,7 +413,10 @@ Transactions:
 - Categories use the same `TransactionType` (`INCOME` / `EXPENSE`); a category never has `TRANSFER`.
 - A transaction stores a date without time, today by default; future dates cannot be picked.
   Within a day, sort by `createdAt`.
-- Amount input in whole sums, stored in tiyin; amount > 0, at most 12 digits.
+- Amount input in whole sums from the on-screen keypad, stored in tiyin; amount > 0, at most
+  12 digits.
+- The add / edit form shows every category of the chosen type as a tile (no "More" tile); the
+  save button reads "Сохранить расход" / "Сохранить доход".
 - Note is optional, at most 200 characters.
 - Default categories (names from `CategoryStrings`) — expense: 🛒 Продукты, 🍽 Кафе и рестораны,
   🚕 Транспорт, 🎬 Развлечения, 🛍 Покупки, 💊 Здоровье, 📱 Связь и интернет, 🏠 Коммунальные услуги,
@@ -305,19 +428,23 @@ Transactions:
 # implemented
 categories    id, name, emoji, type (INCOME | EXPENSE), sortOrder, createdAt, updatedAt
 transactions  id, type (INCOME | EXPENSE), amount, categoryId (FK, RESTRICT), date, note, createdAt, updatedAt
+budgets       id, categoryId (FK, RESTRICT, unique), amount, createdAt, updatedAt
 
 # draft — adjust when implementing
 accounts      id, name, type (MAIN | SAVINGS), initialBalance, goalAmount?, currency, createdAt, updatedAt
 categories    + isArchived (with the Categories feature)
 transactions  + accountId, toAccountId?, type TRANSFER, categoryId? (with Savings)
-budgets       id, categoryId (unique), amount, createdAt, updatedAt
 ```
+
+Database version: 2 (`shared/schemas/2.json`). Migrations: 1 → 2 `AutoMigration` (adds `budgets`).
 
 ### Open business rules (proposed, not confirmed — ask when implementing the feature)
 
 - Initial balance: `initialBalance` field on the main account, edited by tapping the balance; no
-  onboarding.
+  onboarding. (Today the Home balance is income minus expenses with no initial balance.)
 - Deleting a category that has transactions: archive it (hidden from pickers, kept in history).
+  What happens to its limit is undecided (today the foreign key is RESTRICT).
+- Whether limits appear on Home, as MVP feature 5 lists, is undecided: the design's Home has none.
 - Deleting a savings account: only when its balance is zero.
 - The main account may go negative (shown in red); withdrawing more than a savings account holds is
   not allowed.
